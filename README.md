@@ -7,6 +7,11 @@ Clona qualquer site com JS renderizado, baixa múltiplas páginas (com suporte a
 - 📥 Download completo de sites (HTML, CSS, JS, imagens, fontes)
 - 🎭 Renderização de JavaScript usando Playwright/Chromium
 - 🖼️ Captura de imagens lazy-loaded
+- 📚 Modo avançado: descoberta e download de múltiplas páginas do mesmo site, com assets organizados em pastas por tipo (css/js/fonts/img) e navegação entre páginas religada
+- 🔒 Suporte a login (usuário/senha) antes de baixar páginas restritas
+- 🎨 Geração de Design System via IA: `design-system.html` + componentes atomic design (atoms/molecules/organisms) reaproveitando classes/CSS reais do site
+- 📋 Geração automática de documento de requisitos (`REQUISITOS.md`) em formato BDD (Gherkin, pt-BR), com requisitos funcionais e não funcionais por página
+- 🤖 Suporte a múltiplos provedores de IA (Gemini grátis com múltiplas chaves + fallback automático para Anthropic)
 - 📦 Exportação em arquivo ZIP
 - 🔄 Interface em tempo real com logs de progresso
 - 🧹 Limpeza automática de arquivos temporários
