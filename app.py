@@ -1,3 +1,11 @@
+import sys
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
+from dotenv import load_dotenv
+load_dotenv()
+
 from flask import Flask, render_template, request, send_file, Response, jsonify
 import os
 import shutil
@@ -6,7 +14,9 @@ import queue
 import threading
 import time
 import glob
-from downloader import WebsiteDownloader, zip_directory, get_site_name
+from downloader import WebsiteDownloader, zip_directory, get_site_name, discover_pages
+from design_system_generator import generate_design_system, DesignSystemGenerationError, is_available as design_system_available
+from requirements_doc_generator import generate_requirements_doc, RequirementsDocGenerationError, is_available as requirements_doc_available
 
 app = Flask(__name__)
 
@@ -69,61 +79,148 @@ cleanup_thread.start()
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', advanced_available=design_system_available())
+
+def _parse_login(data):
+    """Extrai/valida as credenciais de login opcionais do corpo da requisição.
+    Retorna (login_dict_ou_None, error_message_ou_None). Nunca loga usuário/senha."""
+    login = data.get('login')
+    if not login:
+        return None, None
+    if not isinstance(login, dict):
+        return None, 'login deve ser um objeto {login_url, username, password}'
+    login_url = login.get('login_url')
+    username = login.get('username')
+    password = login.get('password')
+    if not login_url or not username or not password:
+        return None, 'login requer login_url, username e password'
+    if not all(isinstance(v, str) for v in (login_url, username, password)):
+        return None, 'login_url, username e password devem ser strings'
+    return {'login_url': login_url, 'username': username, 'password': password}, None
+
+@app.route('/discover-pages', methods=['POST'])
+def discover_pages_route():
+    """Analisa a home e retorna os links internos encontrados, para o usuário escolher quais baixar"""
+    data = request.get_json(silent=True) or {}
+    url = data.get('url')
+
+    if not url:
+        return jsonify({'error': 'URL é obrigatória'}), 400
+
+    login, login_error = _parse_login(data)
+    if login_error:
+        return jsonify({'error': login_error}), 400
+
+    try:
+        pages, truncated, login_ok, login_logs = discover_pages(url, login=login)
+        return jsonify({'pages': pages, 'truncated': truncated, 'login_ok': login_ok, 'login_logs': login_logs})
+    except Exception as e:
+        return jsonify({'error': f'Não foi possível analisar o site: {e}'}), 500
 
 @app.route('/start-download', methods=['POST'])
 def start_download():
     """Start download process and return session ID for SSE"""
     data = request.get_json()
     url = data.get('url')
-    
+    advanced_mode = bool(data.get('advanced_mode'))
+    selected_pages = data.get('selected_pages') or []
+
     if not url:
         return jsonify({'error': 'URL is required'}), 400
-    
+
+    if not isinstance(selected_pages, list) or not all(isinstance(p, str) for p in selected_pages):
+        return jsonify({'error': 'selected_pages deve ser uma lista de URLs'}), 400
+    selected_pages = selected_pages[:20]
+
+    login, login_error = _parse_login(data)
+    if login_error:
+        return jsonify({'error': login_error}), 400
+
+    if advanced_mode and not design_system_available():
+        return jsonify({'error': 'Modo avançado indisponível: configure ANTHROPIC_API_KEY no servidor'}), 400
+
     # Create session
     session_id = str(uuid.uuid4())
     message_queues[session_id] = queue.Queue()
     download_results[session_id] = {'status': 'processing', 'zip_path': None, 'filename': None}
-    
+
     # Start download in background thread
-    thread = threading.Thread(target=process_download, args=(session_id, url))
+    thread = threading.Thread(target=process_download, args=(session_id, url, advanced_mode, selected_pages, login))
     thread.daemon = True
     thread.start()
-    
+
     return jsonify({'session_id': session_id})
 
-def process_download(session_id, url):
+def process_download(session_id, url, advanced_mode=False, selected_pages=None, login=None):
     """Background download process"""
+    selected_pages = selected_pages or []
     q = message_queues[session_id]
     request_id = session_id
     download_dir = os.path.join(DOWNLOAD_FOLDER, request_id)
     zip_path = os.path.join(DOWNLOAD_FOLDER, f"{request_id}.zip")
-    
+
     def log_callback(message):
         q.put(message)
-    
+
     try:
         # Initialize downloader with log callback
-        downloader = WebsiteDownloader(url, download_dir, log_callback=log_callback)
-        
+        downloader = WebsiteDownloader(url, download_dir, log_callback=log_callback, typed_assets=advanced_mode)
+
         # Process the site
-        success = downloader.process()
-        
+        if advanced_mode:
+            pages = [url] + selected_pages
+            q.put(f"📚 Modo avançado ativado — {len(pages)} página(s) selecionada(s)")
+            success = downloader.process_multi(pages, login=login)
+        else:
+            success = downloader.process(login=login)
+
         if not success:
             q.put("❌ Falha no download")
             download_results[session_id] = {'status': 'error', 'error': 'Failed to download site'}
             return
-        
+
+        if advanced_mode:
+            q.put("🎨 Gerando Design System com IA (Claude)...")
+            try:
+                files = generate_design_system(
+                    downloader.get_all_pages_html(),
+                    downloader.get_captured_css(),
+                    asset_manifest=downloader.get_asset_manifest(),
+                    log_callback=log_callback,
+                )
+                for rel_path, content in files.items():
+                    full_path = os.path.join(download_dir, rel_path)
+                    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                    with open(full_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                q.put(f"✅ Design System gerado ({len(files)} arquivo(s))")
+            except DesignSystemGenerationError as e:
+                q.put(f"⚠️ Não foi possível gerar o Design System: {e}")
+            except Exception as e:
+                q.put(f"⚠️ Erro inesperado ao gerar Design System: {e}")
+
+        if requirements_doc_available():
+            q.put("📋 Gerando documento de requisitos (BDD) com IA...")
+            try:
+                doc = generate_requirements_doc(downloader.get_all_pages_html(), log_callback=log_callback)
+                with open(os.path.join(download_dir, 'REQUISITOS.md'), 'w', encoding='utf-8') as f:
+                    f.write(doc)
+                q.put("✅ Documento de requisitos gerado (REQUISITOS.md)")
+            except RequirementsDocGenerationError as e:
+                q.put(f"⚠️ Não foi possível gerar o documento de requisitos: {e}")
+            except Exception as e:
+                q.put(f"⚠️ Erro inesperado ao gerar documento de requisitos: {e}")
+
         # Generate filename from site name
         site_name = get_site_name(url)
         zip_filename = f"{site_name}.zip"
-        
+
         q.put("📦 Criando arquivo ZIP...")
         zip_directory(download_dir, zip_path)
-        
+
         # Cleanup raw files
         shutil.rmtree(download_dir)
-        
+
         q.put("🎉 Download pronto!")
         download_results[session_id] = {
             'status': 'complete',
@@ -131,7 +228,7 @@ def process_download(session_id, url):
             'filename': zip_filename,
             'created_at': time.time()
         }
-        
+
     except Exception as e:
         q.put(f"❌ Erro: {str(e)}")
         download_results[session_id] = {'status': 'error', 'error': str(e)}

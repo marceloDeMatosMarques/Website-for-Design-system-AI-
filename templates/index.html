@@ -144,6 +144,153 @@
             font-weight: 600;
             text-decoration: underline;
         }
+        .advanced-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #444;
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+            cursor: pointer;
+        }
+        .advanced-toggle input[type="checkbox"] {
+            accent-color: #4a6cf7;
+            width: 16px;
+            height: 16px;
+        }
+        .advanced-hint {
+            color: #b45309;
+            font-size: 0.78rem;
+            margin: -0.5rem 0 1rem 0;
+        }
+        .secondary-btn {
+            background: transparent;
+            color: #4a6cf7;
+            border: 2px solid #4a6cf7;
+            padding: 12px 24px;
+            font-size: 0.95rem;
+            border-radius: 10px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 1rem;
+            transition: background 0.2s;
+        }
+        .secondary-btn:hover:not(:disabled) {
+            background: rgba(74, 108, 247, 0.08);
+        }
+        .secondary-btn:disabled {
+            border-color: #ccc;
+            color: #999;
+            cursor: not-allowed;
+        }
+        .secondary-btn .spinner {
+            border: 2px solid rgba(74, 108, 247, 0.3);
+            border-top-color: #4a6cf7;
+        }
+        .pages-checklist {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            max-height: 220px;
+            overflow-y: auto;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .pages-checklist-actions {
+            display: flex;
+            gap: 12px;
+            padding: 4px 8px 8px 8px;
+            font-size: 0.78rem;
+        }
+        .pages-checklist-actions a {
+            color: #4a6cf7;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .page-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            color: #333;
+        }
+        .page-item:hover {
+            background: #f5f7ff;
+        }
+        .page-item input[type="checkbox"] {
+            accent-color: #4a6cf7;
+        }
+        .page-item .page-path {
+            color: #888;
+            font-size: 0.75rem;
+        }
+        .login-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #444;
+            font-size: 0.85rem;
+            margin-bottom: 0.75rem;
+            cursor: pointer;
+        }
+        .login-toggle input[type="checkbox"] {
+            accent-color: #4a6cf7;
+            width: 16px;
+            height: 16px;
+        }
+        .login-fields {
+            display: none;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .login-fields.active {
+            display: block;
+        }
+        .login-fields input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            outline: none;
+            margin-bottom: 8px;
+            transition: border-color 0.2s;
+        }
+        .login-fields input:last-child {
+            margin-bottom: 0;
+        }
+        .login-fields input:focus {
+            border-color: #4a6cf7;
+        }
+        .login-hint {
+            color: #888;
+            font-size: 0.72rem;
+            margin: -0.5rem 0 1rem 0;
+        }
+        .login-status {
+            font-size: 0.82rem;
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+        .login-status-ok {
+            background: #ecfdf5;
+            color: #047857;
+            border: 1px solid #a7f3d0;
+        }
+        .login-status-fail {
+            background: #fffbeb;
+            color: #92400e;
+            border: 1px solid #fde68a;
+        }
     </style>
 </head>
 <body>
@@ -154,12 +301,40 @@
         <div class="input-group">
             <input type="url" id="urlInput" placeholder="https://exemplo.com" required>
         </div>
-        
+
+        <label class="login-toggle">
+            <input type="checkbox" id="loginToggle" onchange="onLoginToggle()">
+            🔒 Este site requer login para acessar as páginas
+        </label>
+        <div class="login-fields" id="loginFields">
+            <input type="url" id="loginUrlInput" placeholder="URL da página de login (ex.: https://site.com/entrar)">
+            <input type="text" id="loginUsernameInput" placeholder="Usuário / E-mail" autocomplete="username">
+            <input type="password" id="loginPasswordInput" placeholder="Senha" autocomplete="current-password">
+        </div>
+        <p class="login-hint" id="loginHint" style="display:none;">As credenciais são usadas só nesta sessão, para fazer login antes de baixar — não ficam salvas no servidor.</p>
+
+        <label class="advanced-toggle">
+            <input type="checkbox" id="advancedToggle" {{ '' if advanced_available else 'disabled' }} onchange="onAdvancedToggle()">
+            Modo avançado (múltiplas páginas + Design System via IA)
+        </label>
+        {% if not advanced_available %}
+        <p class="advanced-hint">⚠️ Defina GEMINI_API_KEYS (grátis) ou ANTHROPIC_API_KEY no servidor para habilitar</p>
+        {% endif %}
+
+        <button id="analyzeBtn" class="secondary-btn" style="display:none;" onclick="analyzeSite()">
+            <span id="analyzeBtnText">🔎 Analisar Site</span>
+            <div class="spinner" id="analyzeSpinner" style="display:none;"></div>
+        </button>
+
+        <div id="loginStatus" style="display:none;"></div>
+
+        <div class="pages-checklist" id="pagesChecklist" style="display:none;"></div>
+
         <button id="downloadBtn" onclick="startDownload()">
             <span id="btnText">Baixar Réplica</span>
             <div class="spinner" id="spinner" style="display: none;"></div>
         </button>
-        
+
         <div class="log-container" id="logContainer"></div>
         
         <div class="success-message" id="successMessage">
@@ -170,6 +345,151 @@
     <script>
         let currentSessionId = null;
         let eventSource = null;
+        let analysisDone = false;
+
+        function onLoginToggle() {
+            const enabled = document.getElementById('loginToggle').checked;
+            document.getElementById('loginFields').classList.toggle('active', enabled);
+            document.getElementById('loginHint').style.display = enabled ? 'block' : 'none';
+        }
+
+        function getLoginPayload() {
+            if (!document.getElementById('loginToggle').checked) {
+                return null;
+            }
+            const loginUrl = document.getElementById('loginUrlInput').value.trim();
+            const username = document.getElementById('loginUsernameInput').value;
+            const password = document.getElementById('loginPasswordInput').value;
+            if (!loginUrl || !username || !password) {
+                alert('Preencha URL de login, usuário e senha, ou desmarque a opção de login');
+                return undefined;
+            }
+            return { login_url: loginUrl, username: username, password: password };
+        }
+
+        function onAdvancedToggle() {
+            const advanced = document.getElementById('advancedToggle').checked;
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const checklist = document.getElementById('pagesChecklist');
+
+            if (advanced) {
+                analyzeBtn.style.display = 'flex';
+                checklist.style.display = analysisDone ? 'block' : 'none';
+                downloadBtn.disabled = !analysisDone;
+            } else {
+                analyzeBtn.style.display = 'none';
+                checklist.style.display = 'none';
+                downloadBtn.disabled = false;
+            }
+        }
+
+        function setAnalyzing(analyzing) {
+            const btn = document.getElementById('analyzeBtn');
+            const btnText = document.getElementById('analyzeBtnText');
+            const spinner = document.getElementById('analyzeSpinner');
+
+            btn.disabled = analyzing;
+            spinner.style.display = analyzing ? 'block' : 'none';
+            btnText.textContent = analyzing ? 'Analisando...' : '🔎 Analisar Site';
+        }
+
+        function analyzeSite() {
+            const url = document.getElementById('urlInput').value.trim();
+            if (!url) {
+                alert('Por favor, insira uma URL válida');
+                return;
+            }
+
+            const login = getLoginPayload();
+            if (login === undefined) {
+                return;
+            }
+
+            setAnalyzing(true);
+            analysisDone = false;
+            document.getElementById('downloadBtn').disabled = true;
+
+            const payload = { url: url };
+            if (login) {
+                payload.login = login;
+            }
+
+            fetch('/discover-pages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                setAnalyzing(false);
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                renderLoginStatus(data.login_ok, data.login_logs || []);
+                renderPagesChecklist(data.pages || []);
+                analysisDone = true;
+                document.getElementById('downloadBtn').disabled = false;
+            })
+            .catch(error => {
+                setAnalyzing(false);
+                alert('Erro ao analisar: ' + error.message);
+            });
+        }
+
+        function renderLoginStatus(loginOk, loginLogs) {
+            const el = document.getElementById('loginStatus');
+            if (loginOk === null || loginOk === undefined) {
+                el.style.display = 'none';
+                return;
+            }
+            el.style.display = 'block';
+            if (loginOk) {
+                el.className = 'login-status login-status-ok';
+                el.textContent = '🔐 Login realizado com sucesso — a lista abaixo inclui páginas que exigem login.';
+            } else {
+                el.className = 'login-status login-status-fail';
+                const detail = loginLogs.length ? loginLogs[loginLogs.length - 1] : '';
+                el.textContent = '⚠️ Login não foi bem-sucedido' + (detail ? (' (' + detail + ')') : '') + ' — a lista abaixo mostra só páginas públicas.';
+            }
+        }
+
+        function renderPagesChecklist(pages) {
+            const container = document.getElementById('pagesChecklist');
+            container.innerHTML = '';
+
+            if (pages.length === 0) {
+                container.innerHTML = '<div class="page-item">Nenhuma outra página encontrada além da home.</div>';
+                container.style.display = 'block';
+                return;
+            }
+
+            const actions = document.createElement('div');
+            actions.className = 'pages-checklist-actions';
+            actions.innerHTML = '<a onclick="toggleAllPages(true)">Selecionar todas</a><a onclick="toggleAllPages(false)">Nenhuma</a>';
+            container.appendChild(actions);
+
+            pages.forEach((page, i) => {
+                const item = document.createElement('label');
+                item.className = 'page-item';
+                item.innerHTML = `
+                    <input type="checkbox" class="page-checkbox" value="${page.url}" checked>
+                    <span>${page.label || page.path} <span class="page-path">${page.path}</span></span>
+                `;
+                container.appendChild(item);
+            });
+
+            container.style.display = 'block';
+        }
+
+        function toggleAllPages(checked) {
+            document.querySelectorAll('.page-checkbox').forEach(cb => cb.checked = checked);
+        }
+
+        function getSelectedPages() {
+            return Array.from(document.querySelectorAll('.page-checkbox:checked')).map(cb => cb.value);
+        }
 
         function startDownload() {
             const url = document.getElementById('urlInput').value.trim();
@@ -178,16 +498,31 @@
                 return;
             }
 
+            const advanced = document.getElementById('advancedToggle').checked;
+            const login = getLoginPayload();
+            if (login === undefined) {
+                return;
+            }
+
             // Update UI
             setLoading(true);
             clearLogs();
             hideSuccess();
 
+            const payload = { url: url };
+            if (advanced) {
+                payload.advanced_mode = true;
+                payload.selected_pages = getSelectedPages();
+            }
+            if (login) {
+                payload.login = login;
+            }
+
             // Start download
             fetch('/start-download', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: url })
+                body: JSON.stringify(payload)
             })
             .then(response => response.json())
             .then(data => {
@@ -196,7 +531,7 @@
                     setLoading(false);
                     return;
                 }
-                
+
                 currentSessionId = data.session_id;
                 connectSSE(currentSessionId);
             })
