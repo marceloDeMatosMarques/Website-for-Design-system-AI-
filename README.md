@@ -1,6 +1,6 @@
-# 🌐 Website Downloader
+# 🌐 Website for Design System AI
 
-Uma ferramenta web para baixar réplicas completas de sites, incluindo conteúdo renderizado por JavaScript.
+Clona qualquer site com JS renderizado, baixa múltiplas páginas (com suporte a login), e usa IA pra reconstruir o design system em componentes atômicos + gerar documentação de requisitos em BDD — tudo automático.
 
 ## ✨ Funcionalidades
 
